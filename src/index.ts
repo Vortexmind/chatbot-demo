@@ -4,6 +4,7 @@ const CORS_HEADERS = {
 	'Access-Control-Allow-Headers': 'Content-Type',
   };
   
+  // Used for messages
   interface ChatbotRequestBody {
 	prompt?: string;
   }
