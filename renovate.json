@@ -1,0 +1,81 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":enablePreCommit",
+    "group:monorepos"
+  ],
+  "timezone": "UTC",
+  "schedule": [
+    "after 9pm every weekday",
+    "before 5am every weekday",
+    "every weekend"
+  ],
+  "labels": ["dependencies"],
+  "commitMessagePrefix": "chore(deps):",
+  "packageRules": [
+    {
+      "description": "Automatically merge minor and patch updates",
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash"
+    },
+    {
+      "description": "Require manual review for major updates",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["major-update"]
+    },
+    {
+      "description": "Group React packages together",
+      "matchPackagePatterns": ["^react", "^@types/react"],
+      "groupName": "React packages",
+      "automerge": false
+    },
+    {
+      "description": "Group Next.js packages together",
+      "matchPackageNames": ["next"],
+      "groupName": "Next.js",
+      "automerge": false
+    },
+    {
+      "description": "Group Cloudflare Workers packages",
+      "matchPackagePatterns": ["^@cloudflare", "^wrangler"],
+      "groupName": "Cloudflare packages"
+    },
+    {
+      "description": "Group Tailwind CSS packages",
+      "matchPackagePatterns": ["tailwindcss", "autoprefixer", "postcss"],
+      "groupName": "Tailwind CSS"
+    },
+    {
+      "description": "Pin TypeScript to avoid breaking changes",
+      "matchPackageNames": ["typescript"],
+      "rangeStrategy": "pin",
+      "automerge": false,
+      "labels": ["typescript"]
+    },
+    {
+      "description": "Separate devDependencies updates",
+      "matchDepTypes": ["devDependencies"],
+      "labels": ["dev-dependencies"]
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "labels": ["security"],
+    "assignees": ["@me"],
+    "automerge": false
+  },
+  "prConcurrentLimit": 3,
+  "prCreation": "not-pending",
+  "rebaseWhen": "behind-base-branch",
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 5am on monday"]
+  },
+  "ignoreDeps": [],
+  "postUpdateOptions": ["npmDedupe"]
+}
