@@ -10,84 +10,56 @@ interface Env {
 	GATEWAY_ID: string;
 }
 
-interface ChatbotRequestBody {
-	prompt?: string;
+interface AIGatewayResponse {
+	choices: Array<{ message: { content: string } }>;
 }
 
-interface AIGatewayResponse {
-	choices: Array<{
-		message: {
-			content: string;
-		};
-	}>;
+function jsonResponse(body: object, status = 200): Response {
+	return new Response(JSON.stringify(body), {
+		status,
+		headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+	});
 }
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		if (request.method === 'OPTIONS') {
-			return new Response(null, {
-				status: 204,
-				headers: CORS_HEADERS,
-			});
+			return new Response(null, { status: 204, headers: CORS_HEADERS });
 		}
 
-		if (request.method === 'POST') {
-			try {
-				const requestBody: ChatbotRequestBody = await request.json();
-				const prompt = requestBody.prompt || 'Tell me who you are and how I can interact with you';
+		if (request.method !== 'POST') {
+			return new Response('Method Not Allowed', { status: 405, headers: CORS_HEADERS });
+		}
 
-				const gatewayUrl = `https://gateway.ai.cloudflare.com/v1/${env.ACCOUNT_ID}/${env.GATEWAY_ID}/compat/chat/completions`;
+		let prompt: string;
+		try {
+			const body = await request.json<{ prompt?: string }>();
+			prompt = body.prompt || 'Tell me who you are and how I can interact with you';
+		} catch {
+			return jsonResponse({ error: 'Invalid JSON body' }, 400);
+		}
 
-				const gatewayResponse = await fetch(gatewayUrl, {
-					method: 'POST',
-					headers: {
-						'cf-aig-authorization': `Bearer ${env.AIG_TOKEN}`,
-						'Content-Type': 'application/json',
-					},
-					body: JSON.stringify({
-						model: 'dynamic/chatbot-demo',
-						messages: [
-							{
-								role: 'user',
-								content: prompt,
-							},
-						],
-					}),
-				});
-
-				if (!gatewayResponse.ok) {
-					const errorText = await gatewayResponse.text();
-					return new Response(JSON.stringify({ error: errorText }), {
-						status: gatewayResponse.status,
-						headers: {
-							'Content-Type': 'application/json',
-							...CORS_HEADERS,
-						},
-					});
-				}
-
-				const data: AIGatewayResponse = await gatewayResponse.json();
-				const responseText = data.choices?.[0]?.message?.content || '';
-
-				return new Response(JSON.stringify({ response: responseText }), {
-					status: 200,
-					headers: {
-						'Content-Type': 'application/json',
-						...CORS_HEADERS,
-					},
-				});
-			} catch (error) {
-				return new Response('Invalid JSON body', {
-					status: 400,
-					headers: CORS_HEADERS,
-				});
+		const gatewayResponse = await fetch(
+			`https://gateway.ai.cloudflare.com/v1/${env.ACCOUNT_ID}/${env.GATEWAY_ID}/compat/chat/completions`,
+			{
+				method: 'POST',
+				headers: {
+					'cf-aig-authorization': `Bearer ${env.AIG_TOKEN}`,
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					model: 'dynamic/chatbot-demo',
+					messages: [{ role: 'user', content: prompt }],
+				}),
 			}
+		);
+
+		if (!gatewayResponse.ok) {
+			return jsonResponse({ error: await gatewayResponse.text() }, gatewayResponse.status);
 		}
 
-		return new Response('Method Not Allowed', {
-			status: 405,
-			headers: CORS_HEADERS,
-		});
+		const data: AIGatewayResponse = await gatewayResponse.json();
+		return jsonResponse({ response: data.choices?.[0]?.message?.content || '' });
 	},
 };
   
