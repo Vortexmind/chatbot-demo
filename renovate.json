@@ -4,7 +4,6 @@
     "config:recommended",
     ":dependencyDashboard",
     ":semanticCommits",
-    ":enablePreCommit",
     "group:monorepos"
   ],
   "timezone": "UTC",
@@ -30,26 +29,14 @@
       "labels": ["major-update"]
     },
     {
-      "description": "Group React packages together",
-      "matchPackagePatterns": ["^react", "^@types/react"],
-      "groupName": "React packages",
-      "automerge": false
-    },
-    {
-      "description": "Group Next.js packages together",
-      "matchPackageNames": ["next"],
-      "groupName": "Next.js",
-      "automerge": false
-    },
-    {
       "description": "Group Cloudflare Workers packages",
       "matchPackagePatterns": ["^@cloudflare", "^wrangler"],
       "groupName": "Cloudflare packages"
     },
     {
-      "description": "Group Tailwind CSS packages",
-      "matchPackagePatterns": ["tailwindcss", "autoprefixer", "postcss"],
-      "groupName": "Tailwind CSS"
+      "description": "Group Vitest packages",
+      "matchPackagePatterns": ["vitest", "^@cloudflare/vitest"],
+      "groupName": "Vitest"
     },
     {
       "description": "Pin TypeScript to avoid breaking changes",
