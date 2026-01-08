@@ -38,7 +38,7 @@ export default {
 		let prompt: string;
 		let username: string;
 		try {
-			const body = await request.json<{ prompt?: string, username?: string }>();
+			const body = await request.json<{ prompt?: string; username?: string }>();
 			prompt = body.prompt || 'Tell me who you are and how I can interact with you';
 			username = body.username || 'Unknown';
 		} catch {
@@ -69,14 +69,10 @@ export default {
 		}
 
 		const data = await res.json<{ choices?: Array<{ message?: { content?: string } }> }>();
-		return jsonResponse(
-			{ response: data.choices?.[0]?.message?.content || '' },
-			200,
-			{
-				'cf-aig-model': res.headers.get('cf-aig-model') || '',
-				'cf-aig-provider': res.headers.get('cf-aig-provider') || '',
-			}
-		);
+		return jsonResponse({ response: data.choices?.[0]?.message?.content || '' }, 200, {
+			'cf-aig-model': res.headers.get('cf-aig-model') || '',
+			'cf-aig-provider': res.headers.get('cf-aig-provider') || '',
+		});
 	},
 };
   
