@@ -12,6 +12,7 @@ interface Env extends AuthEnv {
 	AIG_TOKEN: string;
 	ACCOUNT_ID: string;
 	GATEWAY_ID: string;
+	DYNAMIC_ROUTE_NAME: string;
 }
 
 function jsonResponse(body: object, status = 200, extra: HeadersInit = {}): Response {
@@ -56,7 +57,7 @@ export default {
 					'cf-aig-metadata': JSON.stringify({ Username: username }),
 				},
 				body: JSON.stringify({
-					model: 'dynamic/chatbot-demo',
+					model: env.DYNAMIC_ROUTE_NAME,
 					messages: [
 						{ role: 'system', content: 'You are a helpful assistant.' },
 						{ role: 'user', content: prompt },

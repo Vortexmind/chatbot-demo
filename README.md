@@ -65,6 +65,14 @@ wrangler secret put POLICY_AUD     # Access application audience tag
 wrangler secret put TEAM_DOMAIN    # e.g., https://yourteam.cloudflareaccess.com
 ```
 
+The dynamic route name is configured in `wrangler.jsonc`:
+
+```jsonc
+"vars": {
+  "DYNAMIC_ROUTE_NAME": "dynamic/chatbot-demo"
+}
+```
+
 ### 3. AI Gateway Setup
 
 1. Create an AI Gateway in the Cloudflare dashboard

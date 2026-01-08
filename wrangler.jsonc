@@ -12,6 +12,9 @@
 	},
 	"ai": {
 		"binding": "AI"
+	},
+	"vars": {
+		"DYNAMIC_ROUTE_NAME": "dynamic/chatbot-demo"
 	}
 	/**
 	 * Smart Placement
