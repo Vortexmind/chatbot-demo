@@ -52,6 +52,8 @@ export async function authenticateRequest(
 	} catch (error) {
 		const message = error instanceof Error ? error.message : 'Unknown error';
 		console.error('Token validation failed:', message);
+		console.error('TEAM_DOMAIN:', env.TEAM_DOMAIN);
+		console.error('POLICY_AUD:', env.POLICY_AUD);
 		return {
 			success: false,
 			response: errorResponse('Authentication failed', `Invalid token: ${message}`, 401, corsHeaders),
