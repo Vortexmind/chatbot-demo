@@ -29,9 +29,11 @@ export default {
 		}
 
 		let prompt: string;
+		let username: string;
 		try {
-			const body = await request.json<{ prompt?: string }>();
+			const body = await request.json<{ prompt?: string, username?: string }>();
 			prompt = body.prompt || 'Tell me who you are and how I can interact with you';
+			username = body.username || 'Unknown';
 		} catch {
 			return jsonResponse({ error: 'Invalid JSON body' }, 400);
 		}
@@ -43,7 +45,7 @@ export default {
 				headers: {
 					'cf-aig-authorization': `Bearer ${env.AIG_TOKEN}`,
 					'Content-Type': 'application/json',
-					'cf-aig-metadata': JSON.stringify({ ClientIP: request.headers.get('CF-Connecting-IP') || 'unknown' }),
+					'cf-aig-metadata': JSON.stringify({ Username: username }),
 				},
 				body: JSON.stringify({
 					model: 'dynamic/chatbot-demo',
