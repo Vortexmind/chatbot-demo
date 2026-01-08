@@ -67,7 +67,12 @@ export default {
 		);
 
 		if (!res.ok) {
-			return jsonResponse({ error: await res.text() }, res.status);
+			try {
+				const errorData = await res.json<{ error?: Array<{ code: number; message: string }> }>();
+				return jsonResponse({ error: errorData.error || 'Unknown error' }, res.status);
+			} catch {
+				return jsonResponse({ error: 'Gateway error' }, res.status);
+			}
 		}
 
 		const data = await res.json<{ choices?: Array<{ message?: { content?: string } }> }>();
