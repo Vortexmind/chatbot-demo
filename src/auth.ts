@@ -15,9 +15,10 @@ function errorResponse(error: string, details: string, status: number, corsHeade
 }
 
 async function validateAccessToken(token: string, env: AuthEnv) {
-	const JWKS = createRemoteJWKSet(new URL(`${env.TEAM_DOMAIN}/cdn-cgi/access/certs`));
+	const teamDomain = env.TEAM_DOMAIN.replace(/\/+$/, '');
+	const JWKS = createRemoteJWKSet(new URL(`${teamDomain}/cdn-cgi/access/certs`));
 	const { payload } = await jwtVerify(token, JWKS, {
-		issuer: env.TEAM_DOMAIN,
+		issuer: teamDomain,
 		audience: env.POLICY_AUD,
 	});
 	return payload;
