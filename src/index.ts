@@ -10,14 +10,10 @@ interface Env {
 	GATEWAY_ID: string;
 }
 
-interface AIGatewayResponse {
-	choices: Array<{ message: { content: string } }>;
-}
-
-function jsonResponse(body: object, status = 200): Response {
+function jsonResponse(body: object, status = 200, extra: HeadersInit = {}): Response {
 	return new Response(JSON.stringify(body), {
 		status,
-		headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+		headers: { 'Content-Type': 'application/json', ...CORS_HEADERS, ...extra },
 	});
 }
 
@@ -39,13 +35,14 @@ export default {
 			return jsonResponse({ error: 'Invalid JSON body' }, 400);
 		}
 
-		const gatewayResponse = await fetch(
+		const res = await fetch(
 			`https://gateway.ai.cloudflare.com/v1/${env.ACCOUNT_ID}/${env.GATEWAY_ID}/compat/chat/completions`,
 			{
 				method: 'POST',
 				headers: {
 					'cf-aig-authorization': `Bearer ${env.AIG_TOKEN}`,
 					'Content-Type': 'application/json',
+					'cf-aig-metadata': JSON.stringify({ ClientIP: request.headers.get('CF-Connecting-IP') || 'unknown' }),
 				},
 				body: JSON.stringify({
 					model: 'dynamic/chatbot-demo',
@@ -54,12 +51,19 @@ export default {
 			}
 		);
 
-		if (!gatewayResponse.ok) {
-			return jsonResponse({ error: await gatewayResponse.text() }, gatewayResponse.status);
+		if (!res.ok) {
+			return jsonResponse({ error: await res.text() }, res.status);
 		}
 
-		const data: AIGatewayResponse = await gatewayResponse.json();
-		return jsonResponse({ response: data.choices?.[0]?.message?.content || '' });
+		const data = await res.json<{ choices?: Array<{ message?: { content?: string } }> }>();
+		return jsonResponse(
+			{ response: data.choices?.[0]?.message?.content || '' },
+			200,
+			{
+				'cf-aig-model': res.headers.get('cf-aig-model') || '',
+				'cf-aig-provider': res.headers.get('cf-aig-provider') || '',
+			}
+		);
 	},
 };
   
