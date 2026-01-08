@@ -2,6 +2,7 @@ const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': 'https://chatbot-demo.homesecurity.rocks',
 	'Access-Control-Allow-Methods': 'POST, OPTIONS',
 	'Access-Control-Allow-Headers': 'Content-Type',
+	'Access-Control-Expose-Headers': 'cf-aig-model, cf-aig-provider'
 };
 
 interface Env {
