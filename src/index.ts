@@ -1,11 +1,13 @@
+import { authenticateRequest, AuthEnv } from './auth';
+
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': 'https://chatbot-demo.homesecurity.rocks',
 	'Access-Control-Allow-Methods': 'POST, OPTIONS',
-	'Access-Control-Allow-Headers': 'Content-Type',
-	'Access-Control-Expose-Headers': 'cf-aig-model, cf-aig-provider'
+	'Access-Control-Allow-Headers': 'Content-Type, CF-Access-JWT-Assertion',
+	'Access-Control-Expose-Headers': 'cf-aig-model, cf-aig-provider',
 };
 
-interface Env {
+interface Env extends AuthEnv {
 	AIG_TOKEN: string;
 	ACCOUNT_ID: string;
 	GATEWAY_ID: string;
@@ -26,6 +28,11 @@ export default {
 
 		if (request.method !== 'POST') {
 			return new Response('Method Not Allowed', { status: 405, headers: CORS_HEADERS });
+		}
+
+		const authResult = await authenticateRequest(request, env, CORS_HEADERS);
+		if (!authResult.success) {
+			return authResult.response;
 		}
 
 		let prompt: string;
