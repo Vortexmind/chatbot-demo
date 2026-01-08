@@ -49,7 +49,10 @@ export default {
 				},
 				body: JSON.stringify({
 					model: 'dynamic/chatbot-demo',
-					messages: [{ role: 'user', content: prompt }],
+					messages: [
+						{ role: 'system', content: 'You are a helpful assistant.' },
+						{ role: 'user', content: prompt },
+					],
 				}),
 			}
 		);
