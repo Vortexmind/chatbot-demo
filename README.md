@@ -12,20 +12,54 @@ A Cloudflare Worker that provides a secure chatbot API using Cloudflare AI Gatew
 ### Request Flow
 
 ```
-Frontend → Worker (auth check) → AI Gateway (dynamic route) → LLM Provider
+Frontend → Worker (auth + validation) → AI Gateway (dynamic route) → Meta Llama Model
 ```
+
+**Dynamic Model Selection:**
+- **Images** → `llama-4-scout-17b-16e-instruct` (multimodal vision model)
+- **Documents** → `llama-3.1-70b-instruct` (long context for documents)
+- **Text-only** → `llama-3.1-8b-instruct-fast` (fast, efficient)
+
+The Worker automatically detects the attachment type and passes it to AI Gateway via the `cf-aig-metadata` header. Dynamic routing in AI Gateway then selects the appropriate Meta Llama model based on the `AttachmentType` metadata field.
 
 ## API
 
 ### POST /
 
-**Request:**
+**Request (text-only):**
 ```json
 {
   "prompt": "Your question here",
   "username": "Optional username for metadata"
 }
 ```
+
+**Request (with attachment):**
+```json
+{
+  "prompt": "Your question here",
+  "username": "Optional username for metadata",
+  "attachment": {
+    "filename": "example.png",
+    "mimeType": "image/png",
+    "data": "base64-encoded-content"
+  }
+}
+```
+
+**Attachment Object:**
+- `filename` (string, required): Original filename
+- `mimeType` (string, required): MIME type of the file
+- `data` (string, required): Base64-encoded file content
+
+**Supported File Types:**
+- **Images**: `image/png`, `image/jpeg`, `image/gif`, `image/webp`
+- **Documents**: `application/pdf`, `text/plain`, `text/markdown`
+
+**Size Limits:**
+- Max file size: 10MB per file
+- Max document length: 20,000 characters (after decoding)
+- Single attachment per request
 
 **Headers:**
 - `Content-Type: application/json`
@@ -78,7 +112,35 @@ The dynamic route name is configured in `wrangler.jsonc`:
 1. Create an AI Gateway in the Cloudflare dashboard
 2. Enable authentication on the gateway
 3. Store provider API keys via BYOK (Bring Your Own Keys)
-4. Create a dynamic route named `chatbot-demo` with your model configuration
+4. Create a dynamic route named `chatbot-demo` with the following configuration:
+
+**Dynamic Route Configuration:**
+
+```
+Start
+  ↓
+Conditional Node: "Check Attachment Type"
+  - Expression: metadata.AttachmentType == "image"
+  - TRUE → Model Node: @cf/meta/llama-4-scout-17b-16e-instruct
+  - FALSE → Next Conditional
+
+Conditional Node: "Check Document Type"
+  - Expression: metadata.AttachmentType == "document"
+  - TRUE → Model Node: @cf/meta/llama-3.1-70b-instruct
+  - FALSE → Model Node: @cf/meta/llama-3.1-8b-instruct-fast
+
+Rate Limit Node: "Per-User Rate Limit"
+  - Key: metadata.Username
+  - Limit: [your rate limit]
+  - Period: [your period]
+  - Fallback: [your fallback model]
+  ↓
+End
+```
+
+**Metadata Fields:**
+- `Username`: User identifier for rate limiting
+- `AttachmentType`: `"image"`, `"document"`, or `"none"` for model routing
 
 ### 4. Cloudflare Access Setup
 

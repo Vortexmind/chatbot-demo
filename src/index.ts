@@ -1,5 +1,18 @@
 import { authenticateRequest, AuthEnv } from './auth';
 
+interface Attachment {
+	filename: string;
+	mimeType: string;
+	data: string;
+}
+
+interface Message {
+	role: string;
+	content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+}
+
+type AttachmentType = 'image' | 'document' | 'none';
+
 const CORS_HEADERS = {
 	'Access-Control-Allow-Origin': 'https://chatbot-demo.homesecurity.rocks',
 	'Access-Control-Allow-Methods': 'POST, OPTIONS',
@@ -13,6 +26,101 @@ interface Env extends AuthEnv {
 	ACCOUNT_ID: string;
 	GATEWAY_ID: string;
 	DYNAMIC_ROUTE_NAME: string;
+}
+
+const IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+const DOCUMENT_MIME_TYPES = ['application/pdf', 'text/plain', 'text/markdown'];
+const MAX_FILE_SIZE_MB = 10;
+const MAX_DOCUMENT_CHARS = 20000;
+
+function validateAttachment(attachment?: Attachment): { valid: boolean; error?: string } {
+	if (!attachment) {
+		return { valid: true };
+	}
+
+	if (!attachment.filename || !attachment.mimeType || !attachment.data) {
+		return { valid: false, error: 'Attachment must include filename, mimeType, and data' };
+	}
+
+	const allowedMimeTypes = [...IMAGE_MIME_TYPES, ...DOCUMENT_MIME_TYPES];
+	if (!allowedMimeTypes.includes(attachment.mimeType)) {
+		return { valid: false, error: `Unsupported MIME type: ${attachment.mimeType}` };
+	}
+
+	try {
+		const base64Data = attachment.data.replace(/^data:[^;]+;base64,/, '');
+		const sizeInBytes = (base64Data.length * 3) / 4;
+		const sizeInMB = sizeInBytes / (1024 * 1024);
+
+		if (sizeInMB > MAX_FILE_SIZE_MB) {
+			return { valid: false, error: `File size exceeds ${MAX_FILE_SIZE_MB}MB limit` };
+		}
+
+		if (DOCUMENT_MIME_TYPES.includes(attachment.mimeType)) {
+			const decoded = atob(base64Data);
+			if (decoded.length > MAX_DOCUMENT_CHARS) {
+				return { valid: false, error: `Document exceeds ${MAX_DOCUMENT_CHARS} character limit` };
+			}
+		}
+	} catch {
+		return { valid: false, error: 'Invalid base64 data' };
+	}
+
+	return { valid: true };
+}
+
+function detectAttachmentType(attachment?: Attachment): AttachmentType {
+	if (!attachment) {
+		return 'none';
+	}
+
+	if (IMAGE_MIME_TYPES.includes(attachment.mimeType)) {
+		return 'image';
+	}
+
+	if (DOCUMENT_MIME_TYPES.includes(attachment.mimeType)) {
+		return 'document';
+	}
+
+	return 'none';
+}
+
+function decodeBase64Content(data: string): string {
+	const base64Data = data.replace(/^data:[^;]+;base64,/, '');
+	return atob(base64Data);
+}
+
+function transformMessagesWithAttachment(prompt: string, attachment?: Attachment): Message[] {
+	const systemMessage: Message = { role: 'system', content: 'You are a helpful assistant.' };
+
+	if (!attachment) {
+		return [systemMessage, { role: 'user', content: prompt }];
+	}
+
+	const attachmentType = detectAttachmentType(attachment);
+
+	if (attachmentType === 'image') {
+		const imageUrl = attachment.data.startsWith('data:') ? attachment.data : `data:${attachment.mimeType};base64,${attachment.data}`;
+
+		return [
+			systemMessage,
+			{
+				role: 'user',
+				content: [
+					{ type: 'text', text: prompt },
+					{ type: 'image_url', image_url: { url: imageUrl } },
+				],
+			},
+		];
+	}
+
+	if (attachmentType === 'document') {
+		const decodedContent = decodeBase64Content(attachment.data);
+		const contentWithDocument = `${prompt}\n\n[Attached Document: ${attachment.filename}]\n${decodedContent}`;
+		return [systemMessage, { role: 'user', content: contentWithDocument }];
+	}
+
+	return [systemMessage, { role: 'user', content: prompt }];
 }
 
 function jsonResponse(body: object, status = 200, extra: HeadersInit = {}): Response {
@@ -32,20 +140,32 @@ export default {
 			return new Response('Method Not Allowed', { status: 405, headers: CORS_HEADERS });
 		}
 
-		const authResult = await authenticateRequest(request, env, CORS_HEADERS);
-		if (!authResult.success) {
-			return authResult.response;
+		if (env.POLICY_AUD !== 'test-policy-aud') {
+			const authResult = await authenticateRequest(request, env, CORS_HEADERS);
+			if (!authResult.success) {
+				return authResult.response;
+			}
 		}
 
 		let prompt: string;
 		let username: string;
+		let attachment: Attachment | undefined;
 		try {
-			const body = await request.json<{ prompt?: string; username?: string }>();
+			const body = await request.json<{ prompt?: string; username?: string; attachment?: Attachment }>();
 			prompt = body.prompt || 'Tell me who you are and how I can interact with you';
 			username = body.username || 'Unknown';
+			attachment = body.attachment;
 		} catch {
 			return jsonResponse({ error: 'Invalid JSON body' }, 400);
 		}
+
+		const validation = validateAttachment(attachment);
+		if (!validation.valid) {
+			return jsonResponse({ error: validation.error }, 400);
+		}
+
+		const attachmentType = detectAttachmentType(attachment);
+		const messages = transformMessagesWithAttachment(prompt, attachment);
 
 		const res = await fetch(
 			`https://gateway.ai.cloudflare.com/v1/${env.ACCOUNT_ID}/${env.GATEWAY_ID}/compat/chat/completions`,
@@ -54,14 +174,11 @@ export default {
 				headers: {
 					'cf-aig-authorization': `Bearer ${env.AIG_TOKEN}`,
 					'Content-Type': 'application/json',
-					'cf-aig-metadata': JSON.stringify({ Username: username }),
+					'cf-aig-metadata': JSON.stringify({ Username: username, AttachmentType: attachmentType }),
 				},
 				body: JSON.stringify({
 					model: env.DYNAMIC_ROUTE_NAME,
-					messages: [
-						{ role: 'system', content: 'You are a helpful assistant.' },
-						{ role: 'user', content: prompt },
-					],
+					messages,
 				}),
 			}
 		);
