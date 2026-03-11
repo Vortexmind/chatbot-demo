@@ -1,0 +1,12 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly" # Changed to weekly to reduce noise
+    
+    # This is the magic part
+    groups:
+      dependencies:
+        patterns:
+          - "*" # This groups ALL packages into one PR
