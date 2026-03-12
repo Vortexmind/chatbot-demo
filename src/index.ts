@@ -31,7 +31,7 @@ interface Env extends AuthEnv {
 const IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 const DOCUMENT_MIME_TYPES = ['application/pdf', 'text/plain', 'text/markdown'];
 const MAX_FILE_SIZE_MB = 10;
-const MAX_DOCUMENT_CHARS = 20000;
+const MAX_DOCUMENT_CHARS = 80000;
 
 function validateAttachment(attachment?: Attachment): { valid: boolean; error?: string } {
 	if (!attachment) {
