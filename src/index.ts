@@ -151,10 +151,10 @@ export default {
 		let username: string;
 		let attachment: Attachment | undefined;
 		try {
-			const body = await request.json<{ prompt?: string; username?: string; attachment?: Attachment }>();
+			const body = await request.json<{ prompt?: string; username?: string; attachments?: Attachment[] }>();
 			prompt = body.prompt || 'Tell me who you are and how I can interact with you';
 			username = body.username || 'Unknown';
-			attachment = body.attachment;
+			attachment = body.attachments?.[0];
 		} catch {
 			return jsonResponse({ error: 'Invalid JSON body' }, 400);
 		}
