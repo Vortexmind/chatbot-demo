@@ -22,6 +22,7 @@ const CORS_HEADERS = {
 };
 
 interface Env extends AuthEnv {
+	AI: Ai;
 	AIG_TOKEN: string;
 	ACCOUNT_ID: string;
 	GATEWAY_ID: string;
@@ -29,11 +30,44 @@ interface Env extends AuthEnv {
 }
 
 const IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
-const DOCUMENT_MIME_TYPES = ['application/pdf', 'text/plain', 'text/markdown'];
+const DOCUMENT_MIME_TYPES = [
+	'application/pdf',
+	'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+	'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+	'application/vnd.oasis.opendocument.text',
+	'application/vnd.oasis.opendocument.spreadsheet',
+	'text/html',
+	'application/xml',
+	'text/csv',
+	'text/plain',
+	'text/markdown',
+];
 const MAX_FILE_SIZE_MB = 10;
-const MAX_DOCUMENT_CHARS = 80000;
+const MAX_DOCUMENT_CHARS = 100000;
 
-function validateAttachment(attachment?: Attachment): { valid: boolean; error?: string } {
+async function convertDocumentToText(attachment: Attachment, env: Env): Promise<{ text: string; tokens: number }> {
+	try {
+		const base64Data = attachment.data.replace(/^data:[^;]+;base64,/, '');
+		const binaryString = atob(base64Data);
+		const bytes = new Uint8Array(binaryString.length);
+		for (let i = 0; i < binaryString.length; i++) {
+			bytes[i] = binaryString.charCodeAt(i);
+		}
+
+		const blob = new Blob([bytes], { type: attachment.mimeType });
+		const result = await env.AI.toMarkdown({ name: attachment.filename, blob });
+
+		if ('error' in result || !result.data) {
+			throw new Error('Document conversion failed');
+		}
+
+		return { text: result.data, tokens: result.tokens };
+	} catch {
+		throw new Error('Document conversion failed');
+	}
+}
+
+async function validateAttachment(attachment: Attachment | undefined, env: Env): Promise<{ valid: boolean; error?: string }> {
 	if (!attachment) {
 		return { valid: true };
 	}
@@ -44,7 +78,7 @@ function validateAttachment(attachment?: Attachment): { valid: boolean; error?: 
 
 	const allowedMimeTypes = [...IMAGE_MIME_TYPES, ...DOCUMENT_MIME_TYPES];
 	if (!allowedMimeTypes.includes(attachment.mimeType)) {
-		return { valid: false, error: `Unsupported MIME type: ${attachment.mimeType}` };
+		return { valid: false, error: `Unsupported file type` };
 	}
 
 	try {
@@ -57,13 +91,16 @@ function validateAttachment(attachment?: Attachment): { valid: boolean; error?: 
 		}
 
 		if (DOCUMENT_MIME_TYPES.includes(attachment.mimeType)) {
-			const decoded = atob(base64Data);
-			if (decoded.length > MAX_DOCUMENT_CHARS) {
-				return { valid: false, error: `Document exceeds ${MAX_DOCUMENT_CHARS} character limit` };
+			const { text } = await convertDocumentToText(attachment, env);
+			if (text.length > MAX_DOCUMENT_CHARS) {
+				return { valid: false, error: `Document content exceeds ${MAX_DOCUMENT_CHARS} character limit` };
 			}
 		}
-	} catch {
-		return { valid: false, error: 'Invalid base64 data' };
+	} catch (error) {
+		if (error instanceof Error && error.message === 'Document conversion failed') {
+			return { valid: false, error: 'Document conversion failed' };
+		}
+		return { valid: false, error: 'Invalid file data' };
 	}
 
 	return { valid: true };
@@ -85,12 +122,8 @@ function detectAttachmentType(attachment?: Attachment): AttachmentType {
 	return 'none';
 }
 
-function decodeBase64Content(data: string): string {
-	const base64Data = data.replace(/^data:[^;]+;base64,/, '');
-	return atob(base64Data);
-}
 
-function transformMessagesWithAttachment(prompt: string, attachment?: Attachment): Message[] {
+async function transformMessagesWithAttachment(prompt: string, attachment: Attachment | undefined, env: Env): Promise<Message[]> {
 	const systemMessage: Message = { role: 'system', content: 'You are a helpful assistant.' };
 
 	if (!attachment) {
@@ -115,8 +148,8 @@ function transformMessagesWithAttachment(prompt: string, attachment?: Attachment
 	}
 
 	if (attachmentType === 'document') {
-		const decodedContent = decodeBase64Content(attachment.data);
-		const contentWithDocument = `${prompt}\n\n[Attached Document: ${attachment.filename}]\n${decodedContent}`;
+		const { text } = await convertDocumentToText(attachment, env);
+		const contentWithDocument = `${prompt}\n\n[Attached Document: ${attachment.filename}]\n${text}`;
 		return [systemMessage, { role: 'user', content: contentWithDocument }];
 	}
 
@@ -159,13 +192,13 @@ export default {
 			return jsonResponse({ error: 'Invalid JSON body' }, 400);
 		}
 
-		const validation = validateAttachment(attachment);
+		const validation = await validateAttachment(attachment, env);
 		if (!validation.valid) {
 			return jsonResponse({ error: validation.error }, 400);
 		}
 
 		const attachmentType = detectAttachmentType(attachment);
-		const messages = transformMessagesWithAttachment(prompt, attachment);
+		const messages = await transformMessagesWithAttachment(prompt, attachment, env);
 
 		const res = await fetch(
 			`https://gateway.ai.cloudflare.com/v1/${env.ACCOUNT_ID}/${env.GATEWAY_ID}/compat/chat/completions`,

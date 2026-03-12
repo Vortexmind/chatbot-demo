@@ -16,11 +16,14 @@ Frontend → Worker (auth + validation) → AI Gateway (dynamic route) → Meta 
 ```
 
 **Dynamic Model Selection:**
-- **Images** → `llama-4-scout-17b-16e-instruct` (multimodal vision model)
-- **Documents** → `llama-3.1-70b-instruct` (long context for documents)
-- **Text-only** → `llama-3.1-8b-instruct-fast` (fast, efficient)
+- **Images** → `llama-4-scout-17b-16e-instruct` (131K token context, multimodal vision)
+- **Documents** → `llama-3.2-3b-instruct` (128K token context, optimized for long documents)
+- **Text-only** → `llama-3.1-8b-instruct-fast` (128K token context, fast and efficient)
 
 The Worker automatically detects the attachment type and passes it to AI Gateway via the `cf-aig-metadata` header. Dynamic routing in AI Gateway then selects the appropriate Meta Llama model based on the `AttachmentType` metadata field.
+
+**Document Processing:**
+Documents are converted to text using Cloudflare Workers AI `toMarkdown` utility, which extracts readable content from PDFs, Office documents, and other formats before sending to the AI model.
 
 ## API
 
@@ -39,11 +42,11 @@ The Worker automatically detects the attachment type and passes it to AI Gateway
 {
   "prompt": "Your question here",
   "username": "Optional username for metadata",
-  "attachment": {
+  "attachments": [{
     "filename": "example.png",
     "mimeType": "image/png",
     "data": "base64-encoded-content"
-  }
+  }]
 }
 ```
 
@@ -54,12 +57,17 @@ The Worker automatically detects the attachment type and passes it to AI Gateway
 
 **Supported File Types:**
 - **Images**: `image/png`, `image/jpeg`, `image/gif`, `image/webp`
-- **Documents**: `application/pdf`, `text/plain`, `text/markdown`
+- **Documents**: 
+  - PDF: `application/pdf`
+  - Microsoft Office: `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (DOCX), `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (XLSX)
+  - Open Document: `application/vnd.oasis.opendocument.text` (ODT), `application/vnd.oasis.opendocument.spreadsheet` (ODS)
+  - Web/Data: `text/html`, `application/xml`, `text/csv`
+  - Plain text: `text/plain`, `text/markdown`
 
 **Size Limits:**
 - Max file size: 10MB per file
-- Max document length: 20,000 characters (after decoding)
-- Single attachment per request
+- Max document content: 100,000 characters (after text extraction)
+- Single attachment per request (first attachment in array is used)
 
 **Headers:**
 - `Content-Type: application/json`
@@ -126,7 +134,7 @@ Conditional Node: "Check Attachment Type"
 
 Conditional Node: "Check Document Type"
   - Expression: metadata.AttachmentType == "document"
-  - TRUE → Model Node: @cf/meta/llama-3.1-70b-instruct
+  - TRUE → Model Node: @cf/meta/llama-3.2-3b-instruct
   - FALSE → Model Node: @cf/meta/llama-3.1-8b-instruct-fast
 
 Rate Limit Node: "Per-User Rate Limit"

@@ -41,10 +41,10 @@ test/
 
 ### Key Functions in src/index.ts
 
-- `validateAttachment(attachment?: Attachment)`: Validates attachment size, MIME type, and base64 format
+- `convertDocumentToText(attachment: Attachment, env: Env)`: Converts documents to text using Workers AI toMarkdown utility
+- `validateAttachment(attachment?: Attachment, env: Env)`: Async validation of attachment size, MIME type, and extracted content length
 - `detectAttachmentType(attachment?: Attachment)`: Returns 'image', 'document', or 'none'
-- `decodeBase64Content(data: string)`: Decodes base64 string for document content
-- `transformMessagesWithAttachment(prompt: string, attachment?: Attachment)`: Transforms messages based on attachment type
+- `transformMessagesWithAttachment(prompt: string, attachment?: Attachment, env: Env)`: Async transformation of messages based on attachment type
 - `jsonResponse(body: object, status: number, extra: HeadersInit)`: Helper for consistent JSON responses with CORS
 
 ## Code Style Guidelines
@@ -93,6 +93,7 @@ export interface AuthEnv {
 }
 
 interface Env extends AuthEnv {
+	AI: Ai;
 	AIG_TOKEN: string;
 	ACCOUNT_ID: string;
 	GATEWAY_ID: string;
@@ -196,14 +197,20 @@ function jsonResponse(body: object, status = 200, extra: HeadersInit = {}): Resp
 
 **Supported Attachment Types:**
 - **Images**: `image/png`, `image/jpeg`, `image/gif`, `image/webp`
-- **Documents**: `application/pdf`, `text/plain`, `text/markdown`
+- **Documents**: 
+  - PDF: `application/pdf`
+  - Microsoft Office: DOCX (`application/vnd.openxmlformats-officedocument.wordprocessingml.document`), XLSX (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`)
+  - Open Document: ODT (`application/vnd.oasis.opendocument.text`), ODS (`application/vnd.oasis.opendocument.spreadsheet`)
+  - Web/Data: `text/html`, `application/xml`, `text/csv`
+  - Plain text: `text/plain`, `text/markdown`
 
 **Validation Rules:**
-- Single attachment per request (optional)
+- Single attachment per request (first item in `attachments` array is used)
 - Max file size: 10MB (calculated from base64)
-- Max document length: 20,000 characters after decoding
+- Max document content: 100,000 characters after text extraction
 - Required fields: `filename`, `mimeType`, `data`
 - Base64 data must be valid
+- Documents are validated after conversion to text using Workers AI toMarkdown
 
 **Message Transformation:**
 - **Images**: Transform to OpenAI vision format with `image_url` content type
@@ -213,18 +220,26 @@ function jsonResponse(body: object, status = 200, extra: HeadersInit = {}): Resp
     { type: 'image_url', image_url: { url: 'data:image/png;base64,...' } }
   ]
   ```
-- **Documents**: Decode base64 and embed in prompt text
+- **Documents**: Convert to text using Workers AI `toMarkdown`, then embed in prompt
   ```typescript
-  content: `${prompt}\n\n[Attached Document: ${filename}]\n${decodedContent}`
+  const { text } = await convertDocumentToText(attachment, env);
+  content: `${prompt}\n\n[Attached Document: ${filename}]\n${text}`
   ```
 - **Text-only**: Standard message format (unchanged)
+
+**Document Conversion Process:**
+1. Decode base64 to binary data (Uint8Array)
+2. Create Blob with proper MIME type
+3. Call `env.AI.toMarkdown()` to extract text content
+4. Use extracted markdown/text in prompt
+5. Generic error messages on conversion failure
 
 **Dynamic Model Routing:**
 - Pass `AttachmentType` in `cf-aig-metadata` header alongside `Username`
 - AI Gateway evaluates `metadata.AttachmentType` to route to appropriate model:
-  - `"image"` → `@cf/meta/llama-4-scout-17b-16e-instruct` (vision)
-  - `"document"` → `@cf/meta/llama-3.1-70b-instruct` (long context)
-  - `"none"` → `@cf/meta/llama-3.1-8b-instruct-fast` (text-only)
+  - `"image"` → `@cf/meta/llama-4-scout-17b-16e-instruct` (131K tokens, multimodal vision)
+  - `"document"` → `@cf/meta/llama-3.2-3b-instruct` (128K tokens, optimized for long documents)
+  - `"none"` → `@cf/meta/llama-3.1-8b-instruct-fast` (128K tokens, text-only)
 
 ### CORS Configuration
 - Specific origin (not wildcard): `https://chatbot-demo.homesecurity.rocks`

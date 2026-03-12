@@ -47,11 +47,11 @@ describe('Chatbot API with Attachments', () => {
 			body: JSON.stringify({
 				prompt: 'Test prompt',
 				username: 'testuser',
-				attachment: {
+				attachments: [{
 					filename: 'test.exe',
 					mimeType: 'application/x-msdownload',
 					data: 'dGVzdA==',
-				},
+				}],
 			}),
 		});
 		const ctx = createExecutionContext();
@@ -60,7 +60,7 @@ describe('Chatbot API with Attachments', () => {
 		const data = await response.json();
 		expect(response.status).toBe(400);
 		expect(data).toHaveProperty('error');
-		expect(data.error).toContain('Unsupported MIME type');
+		expect(data.error).toContain('Unsupported file type');
 	});
 
 	it('rejects attachment with invalid base64 data', async () => {
@@ -70,11 +70,11 @@ describe('Chatbot API with Attachments', () => {
 			body: JSON.stringify({
 				prompt: 'Test prompt',
 				username: 'testuser',
-				attachment: {
+				attachments: [{
 					filename: 'test.png',
 					mimeType: 'image/png',
 					data: 'not-valid-base64!!!',
-				},
+				}],
 			}),
 		});
 		const ctx = createExecutionContext();
@@ -84,7 +84,7 @@ describe('Chatbot API with Attachments', () => {
 		expect(response.status).toBe(400);
 		expect(data).toHaveProperty('error');
 		if (typeof data.error === 'string') {
-			expect(data.error).toBe('Invalid base64 data');
+			expect(data.error).toBe('Invalid file data');
 		}
 	});
 
@@ -95,10 +95,10 @@ describe('Chatbot API with Attachments', () => {
 			body: JSON.stringify({
 				prompt: 'Test prompt',
 				username: 'testuser',
-				attachment: {
+				attachments: [{
 					filename: 'test.png',
 					mimeType: 'image/png',
-				},
+				}],
 			}),
 		});
 		const ctx = createExecutionContext();
@@ -117,11 +117,11 @@ describe('Chatbot API with Attachments', () => {
 			body: JSON.stringify({
 				prompt: 'What is in this image?',
 				username: 'testuser',
-				attachment: {
+				attachments: [{
 					filename: 'test.png',
 					mimeType: 'image/png',
 					data: smallImageBase64,
-				},
+				}],
 			}),
 		});
 		const ctx = createExecutionContext();
@@ -130,8 +130,8 @@ describe('Chatbot API with Attachments', () => {
 		const data = await response.json();
 		if (response.status === 400 && data.error) {
 			expect(data.error).not.toContain('Attachment must include');
-			expect(data.error).not.toContain('Unsupported MIME type');
-			expect(data.error).not.toContain('Invalid base64 data');
+			expect(data.error).not.toContain('Unsupported file type');
+			expect(data.error).not.toContain('Invalid file data');
 			expect(data.error).not.toContain('File size exceeds');
 		}
 	});
@@ -144,11 +144,11 @@ describe('Chatbot API with Attachments', () => {
 			body: JSON.stringify({
 				prompt: 'Summarize this document',
 				username: 'testuser',
-				attachment: {
+				attachments: [{
 					filename: 'test.txt',
 					mimeType: 'text/plain',
 					data: textBase64,
-				},
+				}],
 			}),
 		});
 		const ctx = createExecutionContext();
@@ -157,8 +157,8 @@ describe('Chatbot API with Attachments', () => {
 		const data = await response.json();
 		if (response.status === 400 && data.error) {
 			expect(data.error).not.toContain('Attachment must include');
-			expect(data.error).not.toContain('Unsupported MIME type');
-			expect(data.error).not.toContain('Invalid base64 data');
+			expect(data.error).not.toContain('Unsupported file type');
+			expect(data.error).not.toContain('Invalid file data');
 			expect(data.error).not.toContain('Document exceeds');
 		}
 	});
@@ -178,8 +178,8 @@ describe('Chatbot API with Attachments', () => {
 		const data = await response.json();
 		if (response.status === 400 && data.error) {
 			expect(data.error).not.toContain('Attachment must include');
-			expect(data.error).not.toContain('Unsupported MIME type');
-			expect(data.error).not.toContain('Invalid base64 data');
+			expect(data.error).not.toContain('Unsupported file type');
+			expect(data.error).not.toContain('Invalid file data');
 		}
 	});
 });
