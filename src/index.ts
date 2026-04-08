@@ -216,14 +216,18 @@ export default {
 			}
 		);
 
-		if (!res.ok) {
-			try {
-				const errorData = await res.json<{ error?: Array<{ code: number; message: string }> }>();
-				return jsonResponse({ error: errorData.error || 'Unknown error' }, res.status);
-			} catch {
-				return jsonResponse({ error: 'Gateway error' }, res.status);
-			}
+	if (!res.ok) {
+		const extraHeaders = {
+			'cf-aig-model': res.headers.get('cf-aig-model') || '',
+			'cf-aig-provider': res.headers.get('cf-aig-provider') || '',
+		};
+		try {
+			const errorData = await res.json<{ error?: Array<{ code: number; message: string }> }>();
+			return jsonResponse({ error: errorData.error || 'Unknown error' }, res.status, extraHeaders);
+		} catch {
+			return jsonResponse({ error: 'Gateway error' }, res.status, extraHeaders);
 		}
+	}
 
 		const data = await res.json<{ choices?: Array<{ message?: { content?: string } }> }>();
 		return jsonResponse({ response: data.choices?.[0]?.message?.content || '' }, 200, {
