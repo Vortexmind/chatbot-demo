@@ -122,7 +122,6 @@ function detectAttachmentType(attachment?: Attachment): AttachmentType {
 	return 'none';
 }
 
-
 async function transformMessagesWithAttachment(prompt: string, attachment: Attachment | undefined, env: Env): Promise<Message[]> {
 	const systemMessage: Message = { role: 'system', content: 'You are a helpful assistant.' };
 
@@ -183,11 +182,13 @@ export default {
 		let prompt: string;
 		let username: string;
 		let attachment: Attachment | undefined;
+		let streamRequested = false;
 		try {
-			const body = await request.json<{ prompt?: string; username?: string; attachments?: Attachment[] }>();
+			const body = await request.json<{ prompt?: string; username?: string; attachments?: Attachment[]; stream?: boolean }>();
 			prompt = body.prompt || 'Tell me who you are and how I can interact with you';
 			username = body.username || 'Unknown';
 			attachment = body.attachments?.[0];
+			streamRequested = body.stream === true;
 		} catch {
 			return jsonResponse({ error: 'Invalid JSON body' }, 400);
 		}
@@ -212,28 +213,42 @@ export default {
 				body: JSON.stringify({
 					model: env.DYNAMIC_ROUTE_NAME,
 					messages,
+					stream: streamRequested,
 				}),
 			}
 		);
 
-	if (!res.ok) {
-		const extraHeaders = {
+		const aigHeaders = {
 			'cf-aig-model': res.headers.get('cf-aig-model') || '',
 			'cf-aig-provider': res.headers.get('cf-aig-provider') || '',
 		};
-		try {
-			const errorData = await res.json<{ error?: Array<{ code: number; message: string }> }>();
-			return jsonResponse({ error: errorData.error || 'Unknown error' }, res.status, extraHeaders);
-		} catch {
-			return jsonResponse({ error: 'Gateway error' }, res.status, extraHeaders);
-		}
-	}
 
+		// Handle errors (return JSON regardless of stream request)
+		if (!res.ok) {
+			try {
+				const errorData = await res.json<{ error?: Array<{ code: number; message: string }> }>();
+				return jsonResponse({ error: errorData.error || 'Unknown error' }, res.status, aigHeaders);
+			} catch {
+				return jsonResponse({ error: 'Gateway error' }, res.status, aigHeaders);
+			}
+		}
+
+		// Streaming response: pipe through the SSE stream
+		if (streamRequested && res.body) {
+			return new Response(res.body, {
+				status: 200,
+				headers: {
+					'Content-Type': 'text/event-stream',
+					'Cache-Control': 'no-cache',
+					Connection: 'keep-alive',
+					...CORS_HEADERS,
+					...aigHeaders,
+				},
+			});
+		}
+
+		// Non-streaming response: parse JSON and return
 		const data = await res.json<{ choices?: Array<{ message?: { content?: string } }> }>();
-		return jsonResponse({ response: data.choices?.[0]?.message?.content || '' }, 200, {
-			'cf-aig-model': res.headers.get('cf-aig-model') || '',
-			'cf-aig-provider': res.headers.get('cf-aig-provider') || '',
-		});
+		return jsonResponse({ response: data.choices?.[0]?.message?.content || '' }, 200, aigHeaders);
 	},
 };
-  
