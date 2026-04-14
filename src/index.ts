@@ -13,13 +13,25 @@ interface Message {
 
 type AttachmentType = 'image' | 'document' | 'none';
 
-const CORS_HEADERS = {
-	'Access-Control-Allow-Origin': 'https://chatbot-demo.homesecurity.rocks',
-	'Access-Control-Allow-Methods': 'POST, OPTIONS',
-	'Access-Control-Allow-Headers': 'Content-Type, CF-Access-JWT-Assertion',
-	'Access-Control-Allow-Credentials': 'true',
-	'Access-Control-Expose-Headers': 'cf-aig-model, cf-aig-provider',
-};
+// Allowed origins for CORS
+const ALLOWED_ORIGINS = [
+	'https://chatbot-demo.homesecurity.rocks',
+	'http://localhost:3000',
+	'http://localhost:3001',
+];
+
+function getCorsHeaders(request: Request): Record<string, string> {
+	const origin = request.headers.get('Origin') || '';
+	const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+
+	return {
+		'Access-Control-Allow-Origin': allowedOrigin,
+		'Access-Control-Allow-Methods': 'POST, OPTIONS',
+		'Access-Control-Allow-Headers': 'Content-Type, CF-Access-JWT-Assertion',
+		'Access-Control-Allow-Credentials': 'true',
+		'Access-Control-Expose-Headers': 'cf-aig-model, cf-aig-provider',
+	};
+}
 
 interface Env extends AuthEnv {
 	AI: Ai;
@@ -155,25 +167,27 @@ async function transformMessagesWithAttachment(prompt: string, attachment: Attac
 	return [systemMessage, { role: 'user', content: prompt }];
 }
 
-function jsonResponse(body: object, status = 200, extra: HeadersInit = {}): Response {
+function jsonResponse(body: object, corsHeaders: Record<string, string>, status = 200, extra: HeadersInit = {}): Response {
 	return new Response(JSON.stringify(body), {
 		status,
-		headers: { 'Content-Type': 'application/json', ...CORS_HEADERS, ...extra },
+		headers: { 'Content-Type': 'application/json', ...corsHeaders, ...extra },
 	});
 }
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
+		const corsHeaders = getCorsHeaders(request);
+
 		if (request.method === 'OPTIONS') {
-			return new Response(null, { status: 204, headers: CORS_HEADERS });
+			return new Response(null, { status: 204, headers: corsHeaders });
 		}
 
 		if (request.method !== 'POST') {
-			return new Response('Method Not Allowed', { status: 405, headers: CORS_HEADERS });
+			return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
 		}
 
 		if (env.POLICY_AUD !== 'test-policy-aud') {
-			const authResult = await authenticateRequest(request, env, CORS_HEADERS);
+			const authResult = await authenticateRequest(request, env, corsHeaders);
 			if (!authResult.success) {
 				return authResult.response;
 			}
@@ -190,12 +204,12 @@ export default {
 			attachment = body.attachments?.[0];
 			streamRequested = body.stream === true;
 		} catch {
-			return jsonResponse({ error: 'Invalid JSON body' }, 400);
+			return jsonResponse({ error: 'Invalid JSON body' }, corsHeaders, 400);
 		}
 
 		const validation = await validateAttachment(attachment, env);
 		if (!validation.valid) {
-			return jsonResponse({ error: validation.error }, 400);
+			return jsonResponse({ error: validation.error }, corsHeaders, 400);
 		}
 
 		const attachmentType = detectAttachmentType(attachment);
@@ -227,9 +241,9 @@ export default {
 		if (!res.ok) {
 			try {
 				const errorData = await res.json<{ error?: Array<{ code: number; message: string }> }>();
-				return jsonResponse({ error: errorData.error || 'Unknown error' }, res.status, aigHeaders);
+				return jsonResponse({ error: errorData.error || 'Unknown error' }, corsHeaders, res.status, aigHeaders);
 			} catch {
-				return jsonResponse({ error: 'Gateway error' }, res.status, aigHeaders);
+				return jsonResponse({ error: 'Gateway error' }, corsHeaders, res.status, aigHeaders);
 			}
 		}
 
@@ -241,7 +255,7 @@ export default {
 					'Content-Type': 'text/event-stream',
 					'Cache-Control': 'no-cache',
 					Connection: 'keep-alive',
-					...CORS_HEADERS,
+					...corsHeaders,
 					...aigHeaders,
 				},
 			});
@@ -249,6 +263,6 @@ export default {
 
 		// Non-streaming response: parse JSON and return
 		const data = await res.json<{ choices?: Array<{ message?: { content?: string } }> }>();
-		return jsonResponse({ response: data.choices?.[0]?.message?.content || '' }, 200, aigHeaders);
+		return jsonResponse({ response: data.choices?.[0]?.message?.content || '' }, corsHeaders, 200, aigHeaders);
 	},
 };
