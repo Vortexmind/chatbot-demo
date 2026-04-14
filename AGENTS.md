@@ -242,10 +242,34 @@ function jsonResponse(body: object, status = 200, extra: HeadersInit = {}): Resp
   - `"none"` → `@cf/meta/llama-3.1-8b-instruct-fast` (128K tokens, text-only)
 
 ### CORS Configuration
-- Specific origin (not wildcard): `https://chatbot-demo.homesecurity.rocks`
+- **Dynamic origin checking**: Validates `Origin` header against allowed list
+- **Allowed origins**:
+  - `https://chatbot-demo.homesecurity.rocks` (production)
+  - `http://localhost:3000` (local dev)
+  - `http://localhost:3001` (local dev)
 - Allowed methods: POST, OPTIONS
 - Expose custom headers: `cf-aig-model`, `cf-aig-provider`
 - Credentials: enabled
+
+**Implementation pattern:**
+```typescript
+const ALLOWED_ORIGINS = [
+  "https://chatbot-demo.homesecurity.rocks",
+  "http://localhost:3000",
+  "http://localhost:3001",
+];
+
+function getCorsHeaders(request: Request): Record<string, string> {
+  const origin = request.headers.get("Origin") || "";
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin)
+    ? origin
+    : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allowedOrigin,
+    // ... other headers
+  };
+}
+```
 
 ## Common Tasks
 
@@ -270,3 +294,10 @@ function jsonResponse(body: object, status = 200, extra: HeadersInit = {}): Resp
 - Run `npm update` for minor/patch updates
 - Check `renovate.json` for automated update configuration
 - Run tests after updating: `npm test`
+
+## Related Projects
+
+- [chatbot-demo-frontend](../chatbot-demo-frontend) - Next.js frontend with tabbed UI (Standard Chat + Agent Chat)
+- [chatbot-demo-agent](../chatbot-demo-agent) - Durable Object agent backend for MCP integration
+
+This worker handles the **Standard Chat** tab in the frontend. The **Agent Chat** tab uses `chatbot-demo-agent` instead.

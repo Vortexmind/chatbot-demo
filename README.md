@@ -176,3 +176,20 @@ src/
 ├── index.ts   # Main worker entry point
 └── auth.ts    # Cloudflare Access JWT validation
 ```
+
+## CORS
+
+The worker uses dynamic origin checking to support both production and local development:
+
+**Allowed origins:**
+- `https://chatbot-demo.homesecurity.rocks` (production)
+- `http://localhost:3000` (local dev)
+- `http://localhost:3001` (local dev)
+
+The `Access-Control-Allow-Origin` header is set dynamically based on the request's `Origin` header. If the origin is not in the allowed list, it defaults to the production origin.
+
+## Related
+
+- [chatbot-demo-frontend](../chatbot-demo-frontend) - Next.js frontend with tabbed UI
+- [chatbot-demo-agent](../chatbot-demo-agent) - Agent backend for MCP integration (used by Agent Chat tab)
+- [AI Gateway Docs](https://developers.cloudflare.com/ai-gateway/)
