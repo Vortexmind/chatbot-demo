@@ -13,10 +13,10 @@
 	"dependencies": {
 		"jose": "^6.2.1"
 	},
-	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "^0.13.4",
-		"typescript": "^5.9.3",
-		"vitest": "^3.2.4",
-		"wrangler": "^4.77.0"
-	}
+"devDependencies": {
+	"@cloudflare/vitest-pool-workers": "^0.13.4",
+	"typescript": "^5.9.3",
+	"vitest": "^4.1.0",
+	"wrangler": "^4.77.0"
+}
 }
