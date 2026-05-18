@@ -7,11 +7,7 @@
     "group:monorepos"
   ],
   "timezone": "UTC",
-  "schedule": [
-    "after 9pm every weekday",
-    "before 5am every weekday",
-    "every weekend"
-  ],
+  "schedule": ["before 5am on monday"],
   "labels": ["dependencies"],
   "commitMessagePrefix": "chore(deps):",
   "packageRules": [
