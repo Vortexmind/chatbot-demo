@@ -21,7 +21,7 @@ miniflare: {
 ### 2. Added Test Mode Bypass (`src/index.ts`)
 ```typescript
 if (env.POLICY_AUD !== 'test-policy-aud') {
-  const authResult = await authenticateRequest(request, env, CORS_HEADERS);
+  const authResult = await authenticateRequest(request, env, corsHeaders);
   if (!authResult.success) {
     return authResult.response;
   }

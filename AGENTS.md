@@ -115,7 +115,7 @@ type AttachmentType = 'image' | 'document' | 'none';
 ```
 
 ### Naming Conventions
-- **Constants**: SCREAMING_SNAKE_CASE (e.g., `CORS_HEADERS`, `AIG_TOKEN`)
+- **Constants**: SCREAMING_SNAKE_CASE (e.g., `AIG_TOKEN`, `DYNAMIC_ROUTE_NAME`)
 - **Interfaces**: PascalCase (e.g., `AuthEnv`, `Env`)
 - **Functions**: camelCase (e.g., `authenticateRequest`, `jsonResponse`)
 - **Variables**: camelCase (e.g., `teamDomain`, `prompt`, `username`)
@@ -146,10 +146,10 @@ try {
 
 Example:
 ```typescript
-function jsonResponse(body: object, status = 200, extra: HeadersInit = {}): Response {
+function jsonResponse(body: object, corsHeaders: Record<string, string>, status = 200, extra: HeadersInit = {}): Response {
 	return new Response(JSON.stringify(body), {
 		status,
-		headers: { 'Content-Type': 'application/json', ...CORS_HEADERS, ...extra },
+		headers: { 'Content-Type': 'application/json', ...corsHeaders, ...extra },
 	});
 }
 ```
@@ -235,11 +235,13 @@ function jsonResponse(body: object, status = 200, extra: HeadersInit = {}): Resp
 5. Generic error messages on conversion failure
 
 **Dynamic Model Routing:**
-- Pass `AttachmentType` in `cf-aig-metadata` header alongside `Username`
-- AI Gateway evaluates `metadata.AttachmentType` to route to appropriate model:
+- Pass `AttachmentType` in the `cf-aig-metadata` header alongside `Username`
+- The route applies the per-user rate limit first; over-limit requests go to `@cf/meta/llama-3.1-8b-instruct-fp8-fast`
+- Within the limit, AI Gateway routes on `metadata.AttachmentType`:
+  - `"none"` → `@cf/ibm-granite/granite-4.0-h-micro` (131K tokens, lowest cost)
   - `"image"` → `@cf/meta/llama-4-scout-17b-16e-instruct` (131K tokens, multimodal vision)
-  - `"document"` → `@cf/meta/llama-3.2-3b-instruct` (128K tokens, optimized for long documents)
-  - `"none"` → `@cf/meta/llama-3.1-8b-instruct-fast` (128K tokens, text-only)
+  - `"document"` → `@cf/google/gemma-4-26b-a4b-it` (256K tokens, long documents)
+  - unknown → `@cf/meta/llama-3.1-8b-instruct-fp8-fast` (128K tokens)
 
 ### CORS Configuration
 - **Dynamic origin checking**: Validates `Origin` header against allowed list
@@ -275,7 +277,7 @@ function getCorsHeaders(request: Request): Record<string, string> {
 
 ### Adding new endpoints
 1. Handle new HTTP method in the main `fetch()` handler
-2. Add method to CORS_HEADERS allowed methods
+2. Update `getCorsHeaders()` allowed methods
 3. Implement authentication if needed
 4. Add proper error handling and logging
 
