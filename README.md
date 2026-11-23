@@ -190,6 +190,5 @@ The `Access-Control-Allow-Origin` header is set dynamically based on the request
 
 ## Related
 
-- [chatbot-demo-frontend](../chatbot-demo-frontend) - Next.js frontend with tabbed UI
-- [chatbot-demo-agent](../chatbot-demo-agent) - Agent backend for MCP integration (used by Agent Chat tab)
+- [chatbot-demo-frontend](../chatbot-demo-frontend) - Next.js frontend
 - [AI Gateway Docs](https://developers.cloudflare.com/ai-gateway/)

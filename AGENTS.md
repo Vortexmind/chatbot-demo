@@ -297,7 +297,6 @@ function getCorsHeaders(request: Request): Record<string, string> {
 
 ## Related Projects
 
-- [chatbot-demo-frontend](../chatbot-demo-frontend) - Next.js frontend with tabbed UI (Standard Chat + Agent Chat)
-- [chatbot-demo-agent](../chatbot-demo-agent) - Durable Object agent backend for MCP integration
+- [chatbot-demo-frontend](../chatbot-demo-frontend) - Next.js frontend
 
-This worker handles the **Standard Chat** tab in the frontend. The **Agent Chat** tab uses `chatbot-demo-agent` instead.
+This worker is the chat backend for the frontend.
