@@ -98,15 +98,16 @@ npm install
 Set the following secrets using Wrangler:
 
 ```bash
-# AI Gateway
-wrangler secret put AIG_TOKEN      # Cloudflare API token for AI Gateway
-wrangler secret put ACCOUNT_ID     # Your Cloudflare account ID
-wrangler secret put GATEWAY_ID     # Your AI Gateway ID
+# AI Gateway (Cloudflare Access service token)
+wrangler secret put CF_ACCESS_CLIENT_ID      # Access service token client ID
+wrangler secret put CF_ACCESS_CLIENT_SECRET  # Access service token client secret
 
 # Cloudflare Access Authentication
 wrangler secret put POLICY_AUD     # Access application audience tag
 wrangler secret put TEAM_DOMAIN    # e.g., https://yourteam.cloudflareaccess.com
 ```
+
+The gateway custom domain is protected by Cloudflare Access and excluded from the zone's WAF custom bot rules. Without that skip rule, server-to-server requests score as automated bots and receive a 403 block page.
 
 The dynamic route name is configured in `wrangler.jsonc`:
 
@@ -121,7 +122,8 @@ The dynamic route name is configured in `wrangler.jsonc`:
 1. Create an AI Gateway in the Cloudflare dashboard
 2. Enable authentication on the gateway
 3. Store provider API keys via BYOK only if you route to external providers; Workers AI models need none
-4. Create a dynamic route named `chatbot-demo` with the following configuration:
+4. Put the gateway behind a Cloudflare Access custom domain and allow the Worker's service token with a Service Auth policy. The Worker sends `CF-Access-Client-Id` and `CF-Access-Client-Secret` to `https://ai-gateway.paolo.me.cloudflare.dev/compat/chat/completions`.
+5. Create a dynamic route named `chatbot-demo` with the following configuration:
 
 **Dynamic Route Configuration:**
 

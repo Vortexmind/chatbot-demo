@@ -35,9 +35,8 @@ function getCorsHeaders(request: Request): Record<string, string> {
 
 interface Env extends AuthEnv {
 	AI: Ai;
-	AIG_TOKEN: string;
-	ACCOUNT_ID: string;
-	GATEWAY_ID: string;
+	CF_ACCESS_CLIENT_ID: string;
+	CF_ACCESS_CLIENT_SECRET: string;
 	DYNAMIC_ROUTE_NAME: string;
 }
 
@@ -216,11 +215,12 @@ export default {
 		const messages = await transformMessagesWithAttachment(prompt, attachment, env);
 
 		const res = await fetch(
-			`https://gateway.ai.cloudflare.com/v1/${env.ACCOUNT_ID}/${env.GATEWAY_ID}/compat/chat/completions`,
+			'https://ai-gateway.paolo.me.cloudflare.dev/compat/chat/completions',
 			{
 				method: 'POST',
 				headers: {
-					'cf-aig-authorization': `Bearer ${env.AIG_TOKEN}`,
+					'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID,
+					'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET,
 					'Content-Type': 'application/json',
 					'cf-aig-metadata': JSON.stringify({ Username: username, AttachmentType: attachmentType }),
 				},

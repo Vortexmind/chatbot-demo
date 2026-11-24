@@ -94,9 +94,8 @@ export interface AuthEnv {
 
 interface Env extends AuthEnv {
 	AI: Ai;
-	AIG_TOKEN: string;
-	ACCOUNT_ID: string;
-	GATEWAY_ID: string;
+	CF_ACCESS_CLIENT_ID: string;
+	CF_ACCESS_CLIENT_SECRET: string;
 	DYNAMIC_ROUTE_NAME: string;
 }
 
@@ -115,7 +114,7 @@ type AttachmentType = 'image' | 'document' | 'none';
 ```
 
 ### Naming Conventions
-- **Constants**: SCREAMING_SNAKE_CASE (e.g., `AIG_TOKEN`, `DYNAMIC_ROUTE_NAME`)
+- **Constants**: SCREAMING_SNAKE_CASE (e.g., `CF_ACCESS_CLIENT_ID`, `DYNAMIC_ROUTE_NAME`)
 - **Interfaces**: PascalCase (e.g., `AuthEnv`, `Env`)
 - **Functions**: camelCase (e.g., `authenticateRequest`, `jsonResponse`)
 - **Variables**: camelCase (e.g., `teamDomain`, `prompt`, `username`)
@@ -171,11 +170,12 @@ function jsonResponse(body: object, corsHeaders: Record<string, string>, status 
 ## Environment Variables & Secrets
 
 **Secrets** (set via `wrangler secret put`):
-- `AIG_TOKEN` - Cloudflare API token for AI Gateway
-- `ACCOUNT_ID` - Cloudflare account ID
-- `GATEWAY_ID` - AI Gateway ID
+- `CF_ACCESS_CLIENT_ID` - Cloudflare Access service token client ID for AI Gateway
+- `CF_ACCESS_CLIENT_SECRET` - Cloudflare Access service token client secret for AI Gateway
 - `POLICY_AUD` - Access application audience tag
 - `TEAM_DOMAIN` - Cloudflare Access team domain (e.g., https://yourteam.cloudflareaccess.com)
+
+The gateway custom domain is protected by Cloudflare Access. The zone's WAF custom rules skip `ai-gateway.paolo.me.cloudflare.dev`; without that skip, server-to-server requests score as automated bots and receive a 403 block page.
 
 **Variables** (in wrangler.jsonc):
 - `DYNAMIC_ROUTE_NAME` - AI Gateway dynamic route name (default: "dynamic/chatbot-demo")

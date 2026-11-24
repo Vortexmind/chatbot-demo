@@ -11,9 +11,8 @@ miniflare: {
   bindings: {
     POLICY_AUD: 'test-policy-aud',
     TEAM_DOMAIN: 'https://test.cloudflareaccess.com',
-    AIG_TOKEN: 'test-aig-token',
-    ACCOUNT_ID: 'test-account-id',
-    GATEWAY_ID: 'test-gateway-id',
+    CF_ACCESS_CLIENT_ID: 'test-access-client-id',
+    CF_ACCESS_CLIENT_SECRET: 'test-access-client-secret',
   },
 }
 ```
