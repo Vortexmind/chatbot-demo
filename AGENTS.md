@@ -235,7 +235,7 @@ The gateway custom domain is protected by Cloudflare Access. The zone's WAF cust
 5. Generic error messages on conversion failure
 
 **Dynamic Model Routing:**
-- Pass `AttachmentType` in the `cf-aig-metadata` header alongside `Username`
+- Pass `AttachmentType` in the `cf-aig-metadata` header alongside `Username`, `user_id` and `user`. `Username` drives the dynamic route rate limit; `user_id` and `user` are the verified Access email used by AI Gateway User Insights.
 - The route applies the per-user rate limit first; over-limit requests go to `@cf/meta/llama-3.1-8b-instruct-fp8-fast`
 - Within the limit, AI Gateway routes on `metadata.AttachmentType`:
   - `"none"` → `@cf/ibm-granite/granite-4.0-h-micro` (131K tokens, lowest cost)
