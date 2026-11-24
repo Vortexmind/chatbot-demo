@@ -46,7 +46,6 @@ describe('Chatbot API with Attachments', () => {
 			headers: { 'Content-Type': 'application/json', 'CF-Access-JWT-Assertion': 'test-token' },
 			body: JSON.stringify({
 				prompt: 'Test prompt',
-				username: 'testuser',
 				attachments: [{
 					filename: 'test.exe',
 					mimeType: 'application/x-msdownload',
@@ -69,7 +68,6 @@ describe('Chatbot API with Attachments', () => {
 			headers: { 'Content-Type': 'application/json', 'CF-Access-JWT-Assertion': 'test-token' },
 			body: JSON.stringify({
 				prompt: 'Test prompt',
-				username: 'testuser',
 				attachments: [{
 					filename: 'test.png',
 					mimeType: 'image/png',
@@ -94,7 +92,6 @@ describe('Chatbot API with Attachments', () => {
 			headers: { 'Content-Type': 'application/json', 'CF-Access-JWT-Assertion': 'test-token' },
 			body: JSON.stringify({
 				prompt: 'Test prompt',
-				username: 'testuser',
 				attachments: [{
 					filename: 'test.png',
 					mimeType: 'image/png',
@@ -116,7 +113,6 @@ describe('Chatbot API with Attachments', () => {
 			headers: { 'Content-Type': 'application/json', 'CF-Access-JWT-Assertion': 'test-token' },
 			body: JSON.stringify({
 				prompt: 'What is in this image?',
-				username: 'testuser',
 				attachments: [{
 					filename: 'test.png',
 					mimeType: 'image/png',
@@ -143,7 +139,6 @@ describe('Chatbot API with Attachments', () => {
 			headers: { 'Content-Type': 'application/json', 'CF-Access-JWT-Assertion': 'test-token' },
 			body: JSON.stringify({
 				prompt: 'Summarize this document',
-				username: 'testuser',
 				attachments: [{
 					filename: 'test.txt',
 					mimeType: 'text/plain',
@@ -169,7 +164,6 @@ describe('Chatbot API with Attachments', () => {
 			headers: { 'Content-Type': 'application/json', 'CF-Access-JWT-Assertion': 'test-token' },
 			body: JSON.stringify({
 				prompt: 'Hello, how are you?',
-				username: 'testuser',
 			}),
 		});
 		const ctx = createExecutionContext();

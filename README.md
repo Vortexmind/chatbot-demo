@@ -21,7 +21,7 @@ Frontend → Worker (auth + validation) → AI Gateway (dynamic route) → Worke
 - **Documents** → `@cf/google/gemma-4-26b-a4b-it` (256K token context, long documents)
 - **Rate-limit fallback** → `@cf/meta/llama-3.1-8b-instruct-fp8-fast` (128K token context)
 
-The Worker detects the attachment type and passes it to AI Gateway via the `cf-aig-metadata` header. The dynamic route selects the model from the `AttachmentType` metadata field.
+The Worker detects the attachment type and passes it to AI Gateway via the `cf-aig-metadata` header. The dynamic route selects the model from the `AttachmentType` metadata field. The Worker also sends `user_id` and `user` from the verified Cloudflare Access email, which AI Gateway User Insights uses to attribute requests and spend to the signed-in user.
 
 **Document Processing:**
 Documents are converted to text using Cloudflare Workers AI `toMarkdown` utility, which extracts readable content from PDFs, Office documents, and other formats before sending to the AI model.

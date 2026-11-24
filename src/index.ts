@@ -185,21 +185,21 @@ export default {
 			return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
 		}
 
+		let userEmail = 'test@example.com';
 		if (env.POLICY_AUD !== 'test-policy-aud') {
 			const authResult = await authenticateRequest(request, env, corsHeaders);
 			if (!authResult.success) {
 				return authResult.response;
 			}
+			userEmail = authResult.payload.email || 'unknown@example.com';
 		}
 
 		let prompt: string;
-		let username: string;
 		let attachment: Attachment | undefined;
 		let streamRequested = false;
 		try {
-			const body = await request.json<{ prompt?: string; username?: string; attachments?: Attachment[]; stream?: boolean }>();
+			const body = await request.json<{ prompt?: string; attachments?: Attachment[]; stream?: boolean }>();
 			prompt = body.prompt || 'Tell me who you are and how I can interact with you';
-			username = body.username || 'Unknown';
 			attachment = body.attachments?.[0];
 			streamRequested = body.stream === true;
 		} catch {
@@ -222,7 +222,12 @@ export default {
 					'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID,
 					'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET,
 					'Content-Type': 'application/json',
-					'cf-aig-metadata': JSON.stringify({ Username: username, AttachmentType: attachmentType }),
+					'cf-aig-metadata': JSON.stringify({
+						user_id: userEmail,
+						user: userEmail,
+						Username: userEmail,
+						AttachmentType: attachmentType,
+					}),
 				},
 				body: JSON.stringify({
 					model: env.DYNAMIC_ROUTE_NAME,
