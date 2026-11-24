@@ -11,12 +11,12 @@
 		"generate-types": "wrangler types"
 	},
 	"dependencies": {
-		"jose": "^6.2.1"
+		"jose": "^6.2.18"
 	},
 "devDependencies": {
 	"@cloudflare/vitest-pool-workers": "^0.23.0",
 	"typescript": "^5.9.3",
 	"vitest": "^4.1.0",
-	"wrangler": "^4.124.0"
+	"wrangler": "^4.166.0"
 }
 }
