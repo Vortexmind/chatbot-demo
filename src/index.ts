@@ -1,4 +1,4 @@
-import { authenticateRequest, AuthEnv } from './auth';
+import { authenticateRequest, type AuthEnv, type Authenticator } from './auth';
 
 interface Attachment {
 	filename: string;
@@ -30,6 +30,7 @@ function getCorsHeaders(request: Request): Record<string, string> {
 		'Access-Control-Allow-Headers': 'Content-Type, CF-Access-JWT-Assertion',
 		'Access-Control-Allow-Credentials': 'true',
 		'Access-Control-Expose-Headers': 'cf-aig-model, cf-aig-provider',
+		Vary: 'Origin',
 	};
 }
 
@@ -55,16 +56,34 @@ const DOCUMENT_MIME_TYPES = [
 ];
 const MAX_FILE_SIZE_MB = 10;
 const MAX_DOCUMENT_CHARS = 100000;
+const MAX_PROMPT_CHARS = 32000;
+const MAX_OUTPUT_TOKENS = 2048;
+const MAX_UPSTREAM_ERROR_CHARS = 300;
+const MAX_UPSTREAM_ERRORS = 5;
 
-async function convertDocumentToText(attachment: Attachment, env: Env): Promise<{ text: string; tokens: number }> {
+interface AttachmentValidation {
+	valid: boolean;
+	error?: string;
+	/** Extracted text for document attachments, so the conversion runs once. */
+	documentText?: string;
+}
+
+function decodeAttachmentData(attachment: Attachment): Uint8Array {
+	const base64Data = attachment.data.replace(/^data:[^;]+;base64,/, '');
+	const binaryString = atob(base64Data);
+	const bytes = new Uint8Array(binaryString.length);
+	for (let i = 0; i < binaryString.length; i++) {
+		bytes[i] = binaryString.charCodeAt(i);
+	}
+	return bytes;
+}
+
+async function convertDocumentToText(
+	attachment: Attachment,
+	bytes: Uint8Array,
+	env: Env
+): Promise<{ text: string; tokens: number }> {
 	try {
-		const base64Data = attachment.data.replace(/^data:[^;]+;base64,/, '');
-		const binaryString = atob(base64Data);
-		const bytes = new Uint8Array(binaryString.length);
-		for (let i = 0; i < binaryString.length; i++) {
-			bytes[i] = binaryString.charCodeAt(i);
-		}
-
 		const blob = new Blob([bytes], { type: attachment.mimeType });
 		const result = await env.AI.toMarkdown({ name: attachment.filename, blob });
 
@@ -78,7 +97,7 @@ async function convertDocumentToText(attachment: Attachment, env: Env): Promise<
 	}
 }
 
-async function validateAttachment(attachment: Attachment | undefined, env: Env): Promise<{ valid: boolean; error?: string }> {
+async function validateAttachment(attachment: Attachment | undefined, env: Env): Promise<AttachmentValidation> {
 	if (!attachment) {
 		return { valid: true };
 	}
@@ -92,26 +111,28 @@ async function validateAttachment(attachment: Attachment | undefined, env: Env):
 		return { valid: false, error: `Unsupported file type` };
 	}
 
+	let bytes: Uint8Array;
 	try {
-		const base64Data = attachment.data.replace(/^data:[^;]+;base64,/, '');
-		const sizeInBytes = (base64Data.length * 3) / 4;
-		const sizeInMB = sizeInBytes / (1024 * 1024);
+		bytes = decodeAttachmentData(attachment);
+	} catch {
+		return { valid: false, error: 'Invalid file data' };
+	}
 
-		if (sizeInMB > MAX_FILE_SIZE_MB) {
-			return { valid: false, error: `File size exceeds ${MAX_FILE_SIZE_MB}MB limit` };
-		}
+	const sizeInMB = bytes.length / (1024 * 1024);
+	if (sizeInMB > MAX_FILE_SIZE_MB) {
+		return { valid: false, error: `File size exceeds ${MAX_FILE_SIZE_MB}MB limit` };
+	}
 
-		if (DOCUMENT_MIME_TYPES.includes(attachment.mimeType)) {
-			const { text } = await convertDocumentToText(attachment, env);
+	if (DOCUMENT_MIME_TYPES.includes(attachment.mimeType)) {
+		try {
+			const { text } = await convertDocumentToText(attachment, bytes, env);
 			if (text.length > MAX_DOCUMENT_CHARS) {
 				return { valid: false, error: `Document content exceeds ${MAX_DOCUMENT_CHARS} character limit` };
 			}
-		}
-	} catch (error) {
-		if (error instanceof Error && error.message === 'Document conversion failed') {
+			return { valid: true, documentText: text };
+		} catch {
 			return { valid: false, error: 'Document conversion failed' };
 		}
-		return { valid: false, error: 'Invalid file data' };
 	}
 
 	return { valid: true };
@@ -133,7 +154,11 @@ function detectAttachmentType(attachment?: Attachment): AttachmentType {
 	return 'none';
 }
 
-async function transformMessagesWithAttachment(prompt: string, attachment: Attachment | undefined, env: Env): Promise<Message[]> {
+function transformMessagesWithAttachment(
+	prompt: string,
+	attachment: Attachment | undefined,
+	documentText: string | undefined
+): Message[] {
 	const systemMessage: Message = { role: 'system', content: 'You are a helpful assistant.' };
 
 	if (!attachment) {
@@ -157,9 +182,8 @@ async function transformMessagesWithAttachment(prompt: string, attachment: Attac
 		];
 	}
 
-	if (attachmentType === 'document') {
-		const { text } = await convertDocumentToText(attachment, env);
-		const contentWithDocument = `${prompt}\n\n[Attached Document: ${attachment.filename}]\n${text}`;
+	if (attachmentType === 'document' && documentText !== undefined) {
+		const contentWithDocument = `${prompt}\n\n[Attached Document: ${attachment.filename}]\n${documentText}`;
 		return [systemMessage, { role: 'user', content: contentWithDocument }];
 	}
 
@@ -169,105 +193,142 @@ async function transformMessagesWithAttachment(prompt: string, attachment: Attac
 function jsonResponse(body: object, corsHeaders: Record<string, string>, status = 200, extra: HeadersInit = {}): Response {
 	return new Response(JSON.stringify(body), {
 		status,
-		headers: { 'Content-Type': 'application/json', ...corsHeaders, ...extra },
+		headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...corsHeaders, ...extra },
 	});
 }
 
-export default {
-	async fetch(request: Request, env: Env): Promise<Response> {
-		const corsHeaders = getCorsHeaders(request);
+/**
+ * Bound and shape whatever the gateway returned so internal detail from an
+ * upstream failure is not reflected verbatim to the caller.
+ */
+function sanitizeUpstreamError(error: unknown): Array<{ code: number; message: string }> | string {
+	if (!Array.isArray(error)) {
+		return 'Gateway error';
+	}
 
-		if (request.method === 'OPTIONS') {
-			return new Response(null, { status: 204, headers: corsHeaders });
-		}
+	const sanitized = error.slice(0, MAX_UPSTREAM_ERRORS).map((entry) => {
+		const record = entry as { code?: unknown; message?: unknown };
+		return {
+			code: typeof record?.code === 'number' ? record.code : 0,
+			message: String(record?.message ?? '').slice(0, MAX_UPSTREAM_ERROR_CHARS),
+		};
+	});
 
-		if (request.method !== 'POST') {
-			return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
-		}
+	return sanitized.length > 0 ? sanitized : 'Gateway error';
+}
 
-		let userEmail = 'test@example.com';
-		if (env.POLICY_AUD !== 'test-policy-aud') {
-			const authResult = await authenticateRequest(request, env, corsHeaders);
+type UpstreamFetch = (input: string, init: RequestInit) => Promise<Response>;
+
+export function createApp(authenticate: Authenticator = authenticateRequest, upstreamFetch: UpstreamFetch = fetch) {
+	return {
+		async fetch(request: Request, env: Env): Promise<Response> {
+			const corsHeaders = getCorsHeaders(request);
+
+			if (request.method === 'OPTIONS') {
+				return new Response(null, { status: 204, headers: corsHeaders });
+			}
+
+			if (request.method !== 'POST') {
+				return new Response('Method Not Allowed', { status: 405, headers: corsHeaders });
+			}
+
+			// Authentication is always enforced. There is no test-mode bypass:
+			// tests inject a stub authenticator through createApp() instead.
+			const authResult = await authenticate(request, env, corsHeaders);
 			if (!authResult.success) {
 				return authResult.response;
 			}
-			userEmail = authResult.payload.email || 'unknown@example.com';
-		}
+			const userEmail = authResult.identity.email;
 
-		let prompt: string;
-		let attachment: Attachment | undefined;
-		let streamRequested = false;
-		try {
-			const body = await request.json<{ prompt?: string; attachments?: Attachment[]; stream?: boolean }>();
-			prompt = body.prompt || 'Tell me who you are and how I can interact with you';
-			attachment = body.attachments?.[0];
-			streamRequested = body.stream === true;
-		} catch {
-			return jsonResponse({ error: 'Invalid JSON body' }, corsHeaders, 400);
-		}
-
-		const validation = await validateAttachment(attachment, env);
-		if (!validation.valid) {
-			return jsonResponse({ error: validation.error }, corsHeaders, 400);
-		}
-
-		const attachmentType = detectAttachmentType(attachment);
-		const messages = await transformMessagesWithAttachment(prompt, attachment, env);
-
-		const res = await fetch(
-			'https://ai-gateway.paolo.me.cloudflare.dev/compat/chat/completions',
-			{
-				method: 'POST',
-				headers: {
-					'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID,
-					'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET,
-					'Content-Type': 'application/json',
-					'cf-aig-metadata': JSON.stringify({
-						user_id: userEmail,
-						user: userEmail,
-						Username: userEmail,
-						AttachmentType: attachmentType,
-					}),
-				},
-				body: JSON.stringify({
-					model: env.DYNAMIC_ROUTE_NAME,
-					messages,
-					stream: streamRequested,
-				}),
-			}
-		);
-
-		const aigHeaders = {
-			'cf-aig-model': res.headers.get('cf-aig-model') || '',
-			'cf-aig-provider': res.headers.get('cf-aig-provider') || '',
-		};
-
-		// Handle errors (return JSON regardless of stream request)
-		if (!res.ok) {
+			let prompt: string;
+			let attachment: Attachment | undefined;
+			let streamRequested = false;
 			try {
-				const errorData = await res.json<{ error?: Array<{ code: number; message: string }> }>();
-				return jsonResponse({ error: errorData.error || 'Unknown error' }, corsHeaders, res.status, aigHeaders);
+				const body = await request.json<{ prompt?: unknown; attachments?: unknown; stream?: unknown }>();
+				if (body.prompt !== undefined && typeof body.prompt !== 'string') {
+					return jsonResponse({ error: 'Invalid prompt' }, corsHeaders, 400);
+				}
+				prompt = (body.prompt as string | undefined) || 'Tell me who you are and how I can interact with you';
+				attachment = Array.isArray(body.attachments) ? (body.attachments[0] as Attachment | undefined) : undefined;
+				streamRequested = body.stream === true;
 			} catch {
-				return jsonResponse({ error: 'Gateway error' }, corsHeaders, res.status, aigHeaders);
+				return jsonResponse({ error: 'Invalid JSON body' }, corsHeaders, 400);
 			}
-		}
 
-		// Streaming response: pipe through the SSE stream
-		if (streamRequested && res.body) {
-			return new Response(res.body, {
-				status: 200,
-				headers: {
-					'Content-Type': 'text/event-stream',
-					'Cache-Control': 'no-cache',
-					Connection: 'keep-alive',
-					...corsHeaders,
-					...aigHeaders,
-				},
-			});
-		}
+			if (prompt.length > MAX_PROMPT_CHARS) {
+				return jsonResponse(
+					{ error: `Prompt exceeds ${MAX_PROMPT_CHARS} character limit` },
+					corsHeaders,
+					400
+				);
+			}
 
-		// Non-streaming response: parse JSON and return
-		const data = await res.json<{ choices?: Array<{ message?: { content?: string } }> }>();
-		return jsonResponse({ response: data.choices?.[0]?.message?.content || '' }, corsHeaders, 200, aigHeaders);
-	},
-};
+			const validation = await validateAttachment(attachment, env);
+			if (!validation.valid) {
+				return jsonResponse({ error: validation.error }, corsHeaders, 400);
+			}
+
+			const attachmentType = detectAttachmentType(attachment);
+			const messages = transformMessagesWithAttachment(prompt, attachment, validation.documentText);
+
+			const res = await upstreamFetch(
+				'https://ai-gateway.paolo.me.cloudflare.dev/compat/chat/completions',
+				{
+					method: 'POST',
+					headers: {
+						'CF-Access-Client-Id': env.CF_ACCESS_CLIENT_ID,
+						'CF-Access-Client-Secret': env.CF_ACCESS_CLIENT_SECRET,
+						'Content-Type': 'application/json',
+						'cf-aig-metadata': JSON.stringify({
+							user_id: userEmail,
+							user: userEmail,
+							Username: userEmail,
+							AttachmentType: attachmentType,
+						}),
+					},
+					body: JSON.stringify({
+						model: env.DYNAMIC_ROUTE_NAME,
+						messages,
+						max_tokens: MAX_OUTPUT_TOKENS,
+						stream: streamRequested,
+					}),
+				}
+			);
+
+			const aigHeaders = {
+				'cf-aig-model': res.headers.get('cf-aig-model') || '',
+				'cf-aig-provider': res.headers.get('cf-aig-provider') || '',
+			};
+
+			// Handle errors (return JSON regardless of stream request)
+			if (!res.ok) {
+				try {
+					const errorData = await res.json<{ error?: unknown }>();
+					return jsonResponse({ error: sanitizeUpstreamError(errorData.error) }, corsHeaders, res.status, aigHeaders);
+				} catch {
+					return jsonResponse({ error: 'Gateway error' }, corsHeaders, res.status, aigHeaders);
+				}
+			}
+
+			// Streaming response: pipe through the SSE stream
+			if (streamRequested && res.body) {
+				return new Response(res.body, {
+					status: 200,
+					headers: {
+						'Content-Type': 'text/event-stream',
+						'Cache-Control': 'no-store',
+						Connection: 'keep-alive',
+						...corsHeaders,
+						...aigHeaders,
+					},
+				});
+			}
+
+			// Non-streaming response: parse JSON and return
+			const data = await res.json<{ choices?: Array<{ message?: { content?: string } }> }>();
+			return jsonResponse({ response: data.choices?.[0]?.message?.content || '' }, corsHeaders, 200, aigHeaders);
+		},
+	};
+}
+
+export default createApp();

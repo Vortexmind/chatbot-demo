@@ -10,6 +10,16 @@
 	"observability": {
 		"enabled": true
 	},
+	// Keep the Worker off its public workers.dev hostname so it is only
+	// reachable through the Access-protected custom domain below.
+	"workers_dev": false,
+	"preview_urls": false,
+	"routes": [
+		{
+			"pattern": "chatbot-demo-worker.homesecurity.rocks",
+			"custom_domain": true
+		}
+	],
 	"ai": {
 		"binding": "AI"
 	},

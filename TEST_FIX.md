@@ -1,65 +1,33 @@
-# Test Environment Fix
+# Test authentication
 
-## Issue
-Tests were failing with 500 errors instead of expected 400 errors because authentication was failing in the test environment due to missing `POLICY_AUD` and `TEAM_DOMAIN` environment variables.
+Tests never weaken the deployed Worker's authentication.
 
-## Solution
+## Approach
 
-### 1. Added Test Environment Variables (`vitest.config.mts`)
-```typescript
-miniflare: {
-  bindings: {
-    POLICY_AUD: 'test-policy-aud',
-    TEAM_DOMAIN: 'https://test.cloudflareaccess.com',
-    CF_ACCESS_CLIENT_ID: 'test-access-client-id',
-    CF_ACCESS_CLIENT_SECRET: 'test-access-client-secret',
-  },
-}
+`src/index.ts` exports `createApp(authenticate)` and a default instance built with
+the real `authenticateRequest` from `src/auth.ts`. Tests build their own instance
+with a stub authenticator:
+
+```ts
+import { createApp } from '../src/index';
+
+const app = createApp(async () => ({
+	success: true,
+	identity: { email: 'test@example.com', sub: 'test-subject' },
+}));
 ```
 
-### 2. Added Test Mode Bypass (`src/index.ts`)
-```typescript
-if (env.POLICY_AUD !== 'test-policy-aud') {
-  const authResult = await authenticateRequest(request, env, corsHeaders);
-  if (!authResult.success) {
-    return authResult.response;
-  }
-}
-```
+There is no `POLICY_AUD === 'test-policy-aud'` bypass in the Worker. That value
+previously disabled authentication for any deployment that happened to use it.
 
-This allows tests to bypass authentication when running in test mode, while production deployments will always enforce authentication.
+## Regression test
 
-## Running Tests
+`vitest.config.mts` still binds `POLICY_AUD: 'test-policy-aud'` on purpose. The
+suite asserts that the default export rejects an unauthenticated request with
+`401` even with that binding, so reintroducing a magic-value bypass fails CI.
 
-To run the tests, use:
+## Running tests
+
 ```bash
 npm test
 ```
-
-Or run specific tests:
-```bash
-npx vitest test/index.spec.ts -t "test name"
-```
-
-## Test Coverage
-
-The test suite covers:
-- ✅ CORS preflight handling
-- ✅ Invalid HTTP method rejection
-- ✅ Invalid JSON body rejection
-- ✅ Invalid MIME type rejection
-- ✅ Invalid base64 data rejection
-- ✅ Missing required fields rejection
-- ✅ Valid image attachment validation (format check)
-- ✅ Valid document attachment validation (format check)
-- ✅ Text-only request validation
-
-**Note:** Tests focus on validation logic rather than full end-to-end API calls. Valid requests may fail at the AI Gateway stage in test mode (expected behavior with mock credentials), but validation errors should not occur for properly formatted attachments.
-
-## Security Note
-
-The test bypass only activates when `POLICY_AUD` is exactly `'test-policy-aud'`. In production, you must set proper values for:
-- `POLICY_AUD` - Your Cloudflare Access application audience tag
-- `TEAM_DOMAIN` - Your Cloudflare Access team domain
-
-This ensures authentication is always enforced in production environments.
