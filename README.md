@@ -33,8 +33,7 @@ Documents are converted to text using Cloudflare Workers AI `toMarkdown` utility
 **Request (text-only):**
 ```json
 {
-  "prompt": "Your question here",
-  "username": "Optional username for metadata"
+  "prompt": "Your question here"
 }
 ```
 
@@ -42,7 +41,6 @@ Documents are converted to text using Cloudflare Workers AI `toMarkdown` utility
 ```json
 {
   "prompt": "Your question here",
-  "username": "Optional username for metadata",
   "attachments": [{
     "filename": "example.png",
     "mimeType": "image/png",
@@ -68,6 +66,8 @@ Documents are converted to text using Cloudflare Workers AI `toMarkdown` utility
 **Size Limits:**
 - Max file size: 10MB per file
 - Max document content: 100,000 characters (after text extraction)
+- Max prompt: 32,000 characters
+- Max output tokens: 2,048
 - Single attachment per request (first attachment in array is used)
 
 **Headers:**
@@ -108,6 +108,26 @@ wrangler secret put TEAM_DOMAIN    # e.g., https://yourteam.cloudflareaccess.com
 ```
 
 The gateway custom domain is protected by Cloudflare Access and excluded from the zone's WAF custom bot rules. Without that skip rule, server-to-server requests score as automated bots and receive a 403 block page.
+
+### Exposure
+
+`wrangler.jsonc` sets `workers_dev: false` and `preview_urls: false`, and declares
+the custom domain route explicitly:
+
+```jsonc
+"workers_dev": false,
+"preview_urls": false,
+"routes": [
+  { "pattern": "chatbot-demo-worker.homesecurity.rocks", "custom_domain": true }
+]
+```
+
+That keeps the Worker off its public `workers.dev` hostname, where the Cloudflare
+Access application does not apply. Authentication is enforced in the Worker
+itself regardless, but the edge policy is the first line.
+
+There is no test-mode authentication bypass. Tests inject a stub authenticator
+through `createApp()`; see `TEST_FIX.md`.
 
 The dynamic route name is configured in `wrangler.jsonc`:
 
